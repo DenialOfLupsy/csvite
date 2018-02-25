@@ -22,8 +22,11 @@ var delimiter = flag.String("d", ",", "The character to use as delimiter")
 var infile = flag.String("i", "file.csv", "The input file")
 var selnum = flag.String("selnum", "", `Comma separated column numbers to print. 0 represents all the columns`)
 var selhead = flag.String("selhead", "", `Comma separated column names to print. Cannot be used with -nh`)
-var delnum = flag.String("delnum", "", `Comma separated column numbers not to print.`)
+var delnum = flag.String("delnum", "", `Comma separated column numbers not to print`)
 var delhead = flag.String("delhead", "", `Comma separated column names not to print. Cannot be used with -nh`)
+var sortnum = flag.String("sortnum", "", `Comma separated column numbers to sort by`)
+var sorthead = flag.String("sorthead", "", `Comma separated column names to sort by. Cannot be used with -nh`)
+var sortmode = flag.String("sortmode", "", `a to sort alphabetically, n to sort numerically, v to sort according to semver`)
 
 func main() {
 
@@ -53,16 +56,22 @@ func main() {
 
 	switch {
 	case *selnum != "":
-		SelectColumnsByIndex(w, r, *selnum, false)
+		SelectColumnsByIndex(w, r, *selnum, SELECT)
 
 	case *selhead != "":
-		SelectColumnsByName(w, r, *selhead, false)
+		SelectColumnsByName(w, r, *selhead, SELECT)
 
 	case *delnum != "":
-		SelectColumnsByIndex(w, r, *delnum, true)
+		SelectColumnsByIndex(w, r, *delnum, DELETE)
 
 	case *delhead != "":
-		SelectColumnsByName(w, r, *delhead, true)
+		SelectColumnsByName(w, r, *delhead, DELETE)
+
+	case *sortnum != "":
+		SelectColumnsByIndex(w, r, *sortnum, SORT)
+
+	case *sorthead != "":
+		SelectColumnsByName(w, r, *sorthead, SORT)
 
 	default:
 		log.Println("No option specified")
@@ -72,8 +81,16 @@ func main() {
 
 }
 
+type Action int
+
+const (
+	SELECT Action = iota
+	DELETE
+	SORT
+)
+
 // SelectColumnsByName
-func SelectColumnsByName(w *csv.Writer, r *csv.Reader, columns string, invert bool) {
+func SelectColumnsByName(w *csv.Writer, r *csv.Reader, columns string, action Action) {
 	splitted := strings.Split(columns, ",")
 	indexes := make([]int, len(splitted))
 
@@ -94,14 +111,19 @@ func SelectColumnsByName(w *csv.Writer, r *csv.Reader, columns string, invert bo
 		}
 	}
 
-	if invert {
+	if action == SORT {
+		chooseMode(w, r, indexes)
+		return
+	}
+
+	if action == DELETE {
 		indexes = complement(indexes, colcount)
 	}
 	SelectColumns(w, r, indexes)
 }
 
 // SelectColumnsByIndex
-func SelectColumnsByIndex(w *csv.Writer, r *csv.Reader, columns string, invert bool) {
+func SelectColumnsByIndex(w *csv.Writer, r *csv.Reader, columns string, action Action) {
 	splitted := strings.Split(columns, ",")
 	indexes := make([]int, len(splitted))
 
@@ -115,12 +137,17 @@ func SelectColumnsByIndex(w *csv.Writer, r *csv.Reader, columns string, invert b
 		if indexes[i] < -1 {
 			log.Fatal(fmt.Errorf("Column index out of range : %d", indexes[i]+1))
 		}
-		if invert && indexes[i] == -1 {
-			log.Fatal(errors.New("Cannot delete all columns"))
+		if action != SELECT && indexes[i] == -1 {
+			log.Fatal(errors.New("Cannot delete/sort all columns"))
 		}
 	}
 
-	if invert {
+	if action == SORT {
+		chooseMode(w, r, indexes)
+		return
+	}
+
+	if action == DELETE {
 		indexes = complement(indexes, colcount)
 	}
 	SelectColumns(w, r, indexes)
@@ -233,4 +260,17 @@ func sortcsv(w *csv.Writer, r *csv.Reader, m Mode, col ...int) {
 	alpha := alphabetically{csv, col[0]}
 	sort.Sort(alpha)
 	w.WriteAll(csv)
+}
+
+func chooseMode(w *csv.Writer, r *csv.Reader, indexes []int) {
+	var mode Mode
+	switch {
+	case strings.HasPrefix(strings.ToLower(*sortmode), "a"):
+		mode = ALPHABETICALLY
+	case strings.HasPrefix(strings.ToLower(*sortmode), "n"):
+		mode = NUMERICALLY
+	case strings.HasPrefix(strings.ToLower(*sortmode), "v"):
+		mode = VERSION
+	}
+	sortcsv(w, r, mode, indexes...)
 }
