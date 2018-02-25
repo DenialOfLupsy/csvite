@@ -219,20 +219,36 @@ func complement(subset []int, length int) []int {
 	return compl
 }
 
-type alphabetically struct {
+type sortable struct {
 	csv [][]string
 	c   int
+	m   Mode
 }
 
-func (a alphabetically) Len() int {
+func (a sortable) Len() int {
 	return len(a.csv)
 }
+func (a sortable) Less(i, j int) bool {
+	switch a.m {
+	case ALPHABETICALLY:
+		return a.csv[i][a.c] < a.csv[j][a.c]
+	case NUMERICALLY:
+		n1, _ := strconv.Atoi(a.csv[i][a.c])
+		n2, _ := strconv.Atoi(a.csv[j][a.c])
+		return n1 < n2
+	case VERSION:
+		splitted1 := strings.Split(a.csv[i][a.c], ".")
+		splitted2 := strings.Split(a.csv[j][a.c], ".")
 
-func (a alphabetically) Less(i, j int) bool {
-	return a.csv[i][a.c] < a.csv[j][a.c]
+		//trasformarlo in numeri
+		//fare un loop sulla piu corta delle due
+		//se uguali continuo a ciclare, se i<j ritorna true
+
+	}
+	panic("Invalid mode specified")
 }
 
-func (a alphabetically) Swap(i, j int) {
+func (a sortable) Swap(i, j int) {
 	a.csv[j], a.csv[i] = a.csv[i], a.csv[j]
 }
 
@@ -257,8 +273,11 @@ func sortcsv(w *csv.Writer, r *csv.Reader, m Mode, col ...int) {
 	}
 	csv = append(csv, tmp...)
 
-	alpha := alphabetically{csv, col[0]}
-	sort.Sort(alpha)
+	sort.Sort(sortable{csv, col[0], m})
+	for _, c := range col[1:] {
+		sort.Stable(sortable{csv, c, m})
+	}
+
 	w.WriteAll(csv)
 }
 
