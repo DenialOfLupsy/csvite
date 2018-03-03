@@ -141,7 +141,7 @@ func SelectColumnsByIndex(w *csv.Writer, r *csv.Reader, columns string, action A
 			log.Fatal(errors.New("Cannot delete/sort all columns"))
 		}
 	}
-
+	//fmt.Println("-- 144 --")
 	if action == SORT {
 		chooseMode(w, r, indexes)
 		return
@@ -239,10 +239,36 @@ func (a sortable) Less(i, j int) bool {
 	case VERSION:
 		splitted1 := strings.Split(a.csv[i][a.c], ".")
 		splitted2 := strings.Split(a.csv[j][a.c], ".")
+		var shorter int
+		//determine the shortest one
+		if len(splitted1) <= len(splitted2) {
+			shorter = len(splitted1)
+		} else {
+			shorter = len(splitted2)
+		}
+		var sp1, sp2 []int
+		//conversion to int
+		for _, s1 := range splitted1 {
+			ll, _ := strconv.Atoi(s1)
+			sp1 = append(sp1, ll)
+		}
+		for _, s2 := range splitted2 {
+			ll, _ := strconv.Atoi(s2)
+			sp2 = append(sp2, ll)
+		}
 
-		//trasformarlo in numeri
-		//fare un loop sulla piu corta delle due
-		//se uguali continuo a ciclare, se i<j ritorna true
+		for k := 0; k < shorter; k++ {
+			switch {
+			case sp1[k] < sp2[k]:
+				return true
+			case sp1[k] > sp2[k]:
+				return false
+			}
+		}
+		if len(sp1) < len(sp2) {
+			return true
+		}
+		return false
 
 	}
 	panic("Invalid mode specified")
@@ -272,11 +298,14 @@ func sortcsv(w *csv.Writer, r *csv.Reader, m Mode, col ...int) {
 		log.Fatal(err)
 	}
 	csv = append(csv, tmp...)
-
+	fmt.Println("TEST")
 	sort.Sort(sortable{csv, col[0], m})
+
+	//if len(col) > 1 {
 	for _, c := range col[1:] {
 		sort.Stable(sortable{csv, c, m})
 	}
+	//}
 
 	w.WriteAll(csv)
 }
@@ -289,7 +318,9 @@ func chooseMode(w *csv.Writer, r *csv.Reader, indexes []int) {
 	case strings.HasPrefix(strings.ToLower(*sortmode), "n"):
 		mode = NUMERICALLY
 	case strings.HasPrefix(strings.ToLower(*sortmode), "v"):
+		//case *sortmode == "v":
 		mode = VERSION
 	}
+	//fmt.Println("-- 231 --")
 	sortcsv(w, r, mode, indexes...)
 }
