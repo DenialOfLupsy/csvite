@@ -26,7 +26,7 @@ var delnum = flag.String("delnum", "", `Comma separated column numbers not to pr
 var delhead = flag.String("delhead", "", `Comma separated column names not to print. Cannot be used with -nh`)
 var sortnum = flag.String("sortnum", "", `Comma separated column numbers to sort by`)
 var sorthead = flag.String("sorthead", "", `Comma separated column names to sort by. Cannot be used with -nh`)
-var sortmode = flag.String("sortmode", "", `a to sort alphabetically, n to sort numerically, v to sort according to semver`)
+var sortmode = flag.String("sortmode", "a", `a to sort alphabetically, n to sort numerically, v to sort according to semver`)
 
 func main() {
 
@@ -56,6 +56,7 @@ func main() {
 
 	r := csv.NewReader(input)       // r è un csv
 	r.Comma = rune((*delimiter)[0]) // rune = char, assegno il valore del separatore
+	r.LazyQuotes = true
 
 	headers, err = r.Read()
 	if err != nil {
@@ -248,10 +249,12 @@ func (a sortable) Less(i, j int) bool {
 	switch a.m {
 	case ALPHABETICALLY:
 		return a.csv[i][a.c] < a.csv[j][a.c]
+
 	case NUMERICALLY:
 		n1, _ := strconv.Atoi(a.csv[i][a.c])
 		n2, _ := strconv.Atoi(a.csv[j][a.c])
 		return n1 < n2
+
 	case VERSION:
 		splitted1 := strings.Split(a.csv[i][a.c], ".")
 		splitted2 := strings.Split(a.csv[j][a.c], ".")
@@ -316,11 +319,9 @@ func sortcsv(w *csv.Writer, r *csv.Reader, m Mode, col ...int) {
 	csv = append(csv, tmp...)
 	sort.Sort(sortable{csv, col[0], m})
 
-	//if len(col) > 1 {
 	for _, c := range col[1:] {
 		sort.Stable(sortable{csv, c, m})
 	}
-	//}
 
 	w.WriteAll(csv)
 }
