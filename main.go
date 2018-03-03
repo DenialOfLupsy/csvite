@@ -29,6 +29,11 @@ var sorthead = flag.String("sorthead", "", `Comma separated column names to sort
 var sortmode = flag.String("sortmode", "a", `a to sort alphabetically, n to sort numerically, v to sort according to semver`)
 
 func main() {
+	flag.Usage = func() {
+		fmt.Println("Usage: csvite [OPTIONS]... [FILE]")
+		fmt.Println("Example: csvite -nh -sortnum 3 -sortmode v file.csv")
+		flag.PrintDefaults()
+	}
 
 	flag.Parse()
 
