@@ -31,7 +31,7 @@ var sortmode = flag.String("sortmode", "a", `a to sort alphabetically, n to sort
 func main() {
 	flag.Usage = func() {
 		fmt.Println("Usage: csvite [OPTIONS]... [FILE]")
-		fmt.Println("Example: csvite -nh -sortnum 3 -sortmode v file.csv")
+		fmt.Println("Example: csvite -nh -sortnum 3 -sortmode v file.csv\n")
 		flag.PrintDefaults()
 	}
 
@@ -42,6 +42,15 @@ func main() {
 
 	if *infile == "" {
 		*infile = flag.Arg(0)
+		if len(flag.Args()) > 1 {
+			fmt.Println("Too many arguments, unflagged file must be last parameter")
+			os.Exit(2)
+		}
+	} else {
+		if len(flag.Args()) > 0 {
+			fmt.Println("Too many arguments, unflagged file must be last parameter")
+			os.Exit(2)
+		}
 	}
 	if *infile != "" {
 		file, err := os.Open(*infile)
