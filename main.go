@@ -19,7 +19,7 @@ var colcount int
 
 var noHeader = flag.Bool("nh", false, "Specify when there are no column headers")
 var delimiter = flag.String("d", ",", "The character to use as delimiter")
-var infile = flag.String("i", "file.csv", "The input file")
+var infile = flag.String("i", "", "The input file, optional if file is last parameter")
 var selnum = flag.String("selnum", "", `Comma separated column numbers to print. 0 represents all the columns`)
 var selhead = flag.String("selhead", "", `Comma separated column names to print. Cannot be used with -nh`)
 var delnum = flag.String("delnum", "", `Comma separated column numbers not to print`)
@@ -32,13 +32,29 @@ func main() {
 
 	flag.Parse()
 
-	file, err := os.Open(*infile)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer file.Close()
+	var input io.Reader
+	var err error
 
-	r := csv.NewReader(file)        // r è un csv
+	if *infile == "" {
+		*infile = flag.Arg(0)
+	}
+	if *infile != "" {
+		file, err := os.Open(*infile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer file.Close()
+		input = file
+	} else {
+		stat, err := os.Stdin.Stat()
+		if err != nil || (stat.Mode()&os.ModeNamedPipe == 0) {
+			fmt.Println("No input file specified")
+			os.Exit(2)
+		}
+		input = os.Stdin
+	}
+
+	r := csv.NewReader(input)       // r è un csv
 	r.Comma = rune((*delimiter)[0]) // rune = char, assegno il valore del separatore
 
 	headers, err = r.Read()
@@ -298,7 +314,6 @@ func sortcsv(w *csv.Writer, r *csv.Reader, m Mode, col ...int) {
 		log.Fatal(err)
 	}
 	csv = append(csv, tmp...)
-	fmt.Println("TEST")
 	sort.Sort(sortable{csv, col[0], m})
 
 	//if len(col) > 1 {
@@ -318,9 +333,7 @@ func chooseMode(w *csv.Writer, r *csv.Reader, indexes []int) {
 	case strings.HasPrefix(strings.ToLower(*sortmode), "n"):
 		mode = NUMERICALLY
 	case strings.HasPrefix(strings.ToLower(*sortmode), "v"):
-		//case *sortmode == "v":
 		mode = VERSION
 	}
-	//fmt.Println("-- 231 --")
 	sortcsv(w, r, mode, indexes...)
 }
