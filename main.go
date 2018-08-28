@@ -29,7 +29,7 @@ var sortnum = flag.String("sortnum", "", `Comma separated column numbers to sort
 var sorthead = flag.String("sorthead", "", `Comma separated column names to sort by. Cannot be used with -nh`)
 var sortmode = flag.String("sortmode", "a", `a to sort alphabetically, n to sort numerically, v to sort according to semver`)
 var cmdnum = flag.Int("cmdnum", -1, "Column number to execute cmd on")
-var cmd = flag.String("cmd", "", "Command to execute on column cmdnum. This is inefficient as it had to run a new process for every row.")
+var cmd = flag.String("cmd", "", "Command to execute on column cmdnum. This is inefficient as it had to run a new process for every row. Please make sure that variables don't get expanded before csvite can read them.")
 
 //todocmdcolhead
 //todo flag to ask for number of column
@@ -38,7 +38,7 @@ func main() {
 	flag.Usage = func() {
 		fmt.Println("Usage: csvite [OPTIONS]... [FILE]")
 		fmt.Println("Example: csvite -nh -sortnum 3 -sortmode v file.csv")
-		fmt.Println("Example: csvite -cmd \"base64 -d $CELL\" -cmdnum 2 file.csv")
+		fmt.Println("Example: csvite -cmd 'echo $CELL | base64' -cmdnum 2 file.csv")
 		fmt.Println()
 		flag.PrintDefaults()
 	}
@@ -384,7 +384,7 @@ func executeCommandByIndex(w *csv.Writer, r *csv.Reader, command string, column 
 
 	var row []string
 	defer w.Flush()
-	
+
 ReadLoop:
 	for {
 		var err error
@@ -404,10 +404,13 @@ ReadLoop:
 				return
 			}
 		}
-		//for tutte le colonne, riscrivile, e alla cella giusta inserisci c
-		c, err := executeCommand(command, record[column])
+
 		for i, r := range record {
-			if i == column {
+			if i == column-1 {
+				c, err := executeCommand(command, record[column])
+				if err != nil {
+					log.Println(err)
+				}
 				row = append(row, c)
 			} else {
 				row = append(row, r)
@@ -416,7 +419,7 @@ ReadLoop:
 		}
 		err = w.Write(row)
 		if err != nil {
-			log.Fatal(err)
+			log.Println(err)
 		}
 
 		row = row[:0]
