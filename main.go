@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"os/exec"
 	"sort"
 	"strconv"
 	"strings"
@@ -27,11 +28,18 @@ var delhead = flag.String("delhead", "", `Comma separated column names not to pr
 var sortnum = flag.String("sortnum", "", `Comma separated column numbers to sort by`)
 var sorthead = flag.String("sorthead", "", `Comma separated column names to sort by. Cannot be used with -nh`)
 var sortmode = flag.String("sortmode", "a", `a to sort alphabetically, n to sort numerically, v to sort according to semver`)
+var cmdnum = flag.Int("cmdnum", -1, "Column number to execute cmd on")
+var cmd = flag.String("cmd", "", "Command to execute on column cmdnum. This is inefficient as it had to run a new process for every row.")
+
+//todocmdcolhead
+//todo flag to ask for number of column
 
 func main() {
 	flag.Usage = func() {
 		fmt.Println("Usage: csvite [OPTIONS]... [FILE]")
-		fmt.Println("Example: csvite -nh -sortnum 3 -sortmode v file.csv\n")
+		fmt.Println("Example: csvite -nh -sortnum 3 -sortmode v file.csv")
+		fmt.Println("Example: csvite -cmd \"base64 -d $CELL\" -cmdnum 2 file.csv")
+		fmt.Println()
 		flag.PrintDefaults()
 	}
 
@@ -83,26 +91,33 @@ func main() {
 	}
 
 	w := csv.NewWriter(os.Stdout)
-	//stampare gli headr se ci sono
+	// Stampare gli header se ci sono
 
 	switch {
 	case *selnum != "":
-		SelectColumnsByIndex(w, r, *selnum, SELECT)
+		selectColumnsByIndex(w, r, *selnum, SELECT)
 
 	case *selhead != "":
-		SelectColumnsByName(w, r, *selhead, SELECT)
+		selectColumnsByName(w, r, *selhead, SELECT)
 
 	case *delnum != "":
-		SelectColumnsByIndex(w, r, *delnum, DELETE)
+		selectColumnsByIndex(w, r, *delnum, DELETE)
 
 	case *delhead != "":
-		SelectColumnsByName(w, r, *delhead, DELETE)
+		selectColumnsByName(w, r, *delhead, DELETE)
 
 	case *sortnum != "":
-		SelectColumnsByIndex(w, r, *sortnum, SORT)
+		selectColumnsByIndex(w, r, *sortnum, SORT)
 
 	case *sorthead != "":
-		SelectColumnsByName(w, r, *sorthead, SORT)
+		selectColumnsByName(w, r, *sorthead, SORT)
+
+	case *cmd != "":
+		if *cmdnum == -1 {
+			fmt.Println("Please specify column.")
+		}
+		executeCommandByIndex(w, r, *cmd, *cmdnum)
+		//executeCommand(cmd,)
 
 	default:
 		log.Println("No option specified")
@@ -120,8 +135,8 @@ const (
 	SORT
 )
 
-// SelectColumnsByName
-func SelectColumnsByName(w *csv.Writer, r *csv.Reader, columns string, action Action) {
+// selectColumnsByName
+func selectColumnsByName(w *csv.Writer, r *csv.Reader, columns string, action Action) {
 	splitted := strings.Split(columns, ",")
 	indexes := make([]int, len(splitted))
 
@@ -138,7 +153,7 @@ func SelectColumnsByName(w *csv.Writer, r *csv.Reader, columns string, action Ac
 			}
 		}
 		if !found {
-			log.Fatal(fmt.Errorf("Column name not found : %s", s))
+			log.Fatal(fmt.Errorf("Column name not found: %s", s))
 		}
 	}
 
@@ -150,11 +165,11 @@ func SelectColumnsByName(w *csv.Writer, r *csv.Reader, columns string, action Ac
 	if action == DELETE {
 		indexes = complement(indexes, colcount)
 	}
-	SelectColumns(w, r, indexes)
+	selectColumns(w, r, indexes)
 }
 
-// SelectColumnsByIndex
-func SelectColumnsByIndex(w *csv.Writer, r *csv.Reader, columns string, action Action) {
+// selectColumnsByIndex
+func selectColumnsByIndex(w *csv.Writer, r *csv.Reader, columns string, action Action) {
 	splitted := strings.Split(columns, ",")
 	indexes := make([]int, len(splitted))
 
@@ -166,7 +181,7 @@ func SelectColumnsByIndex(w *csv.Writer, r *csv.Reader, columns string, action A
 			log.Fatal(err)
 		}
 		if indexes[i] < -1 {
-			log.Fatal(fmt.Errorf("Column index out of range : %d", indexes[i]+1))
+			log.Fatal(fmt.Errorf("Column index out of range: %d", indexes[i]+1))
 		}
 		if action != SELECT && indexes[i] == -1 {
 			log.Fatal(errors.New("Cannot delete/sort all columns"))
@@ -181,11 +196,11 @@ func SelectColumnsByIndex(w *csv.Writer, r *csv.Reader, columns string, action A
 	if action == DELETE {
 		indexes = complement(indexes, colcount)
 	}
-	SelectColumns(w, r, indexes)
+	selectColumns(w, r, indexes)
 }
 
-// SelectColumns
-func SelectColumns(w *csv.Writer, r *csv.Reader, indexes []int) {
+// selectColumns
+func selectColumns(w *csv.Writer, r *csv.Reader, indexes []int) {
 
 	var row []string
 
@@ -212,8 +227,9 @@ ReadLoop:
 		}
 
 		for _, s := range indexes {
+			fmt.Println(s)
 			if s > len(record) {
-				log.Fatal(fmt.Errorf("Column index out of range : %d", s+1))
+				log.Fatal(fmt.Errorf("Column index out of range: %d", s+1))
 			}
 
 			if s == -1 {
@@ -273,14 +289,14 @@ func (a sortable) Less(i, j int) bool {
 		splitted1 := strings.Split(a.csv[i][a.c], ".")
 		splitted2 := strings.Split(a.csv[j][a.c], ".")
 		var shorter int
-		//determine the shortest one
+		// Determine the shortest one.
 		if len(splitted1) <= len(splitted2) {
 			shorter = len(splitted1)
 		} else {
 			shorter = len(splitted2)
 		}
 		var sp1, sp2 []int
-		//conversion to int
+		// Conversion to int.
 		for _, s1 := range splitted1 {
 			ll, _ := strconv.Atoi(s1)
 			sp1 = append(sp1, ll)
@@ -351,4 +367,58 @@ func chooseMode(w *csv.Writer, r *csv.Reader, indexes []int) {
 		mode = VERSION
 	}
 	sortcsv(w, r, mode, indexes...)
+}
+
+func executeCommand(cmd string, cell string) (string, error) {
+
+	c := exec.Command("bash", "-c", cmd)
+	c.Env = []string{"CELL=" + cell}
+	output, err := c.Output()
+	if len(output) > 0 {
+		output = output[:len(output)-1]
+	}
+	return string(output), err
+}
+
+func executeCommandByIndex(w *csv.Writer, r *csv.Reader, command string, column int) {
+
+	var row []string
+	defer w.Flush()
+	
+ReadLoop:
+	for {
+		var err error
+		var record []string
+
+		if firstrow != nil {
+			record = firstrow
+			firstrow = nil
+		} else {
+			record, err = r.Read()
+			switch err {
+			case io.EOF:
+				break ReadLoop
+			case nil:
+			default:
+				log.Println(err)
+				return
+			}
+		}
+		//for tutte le colonne, riscrivile, e alla cella giusta inserisci c
+		c, err := executeCommand(command, record[column])
+		for i, r := range record {
+			if i == column {
+				row = append(row, c)
+			} else {
+				row = append(row, r)
+			}
+
+		}
+		err = w.Write(row)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		row = row[:0]
+	}
 }
